@@ -1,7 +1,7 @@
 # Verification plan — <Synchronous FIFO>
 
 
-**Authors:Elijah, Lakshmi, Lona, Hailey** **Spec version:1.0** **Date:10/18/26**
+**Authors: Elijah, Lakshmi, Lona, Hailey** **Spec version: 1.0** **Date:10/18/26**
 
 
 ## 1. Scope
@@ -21,6 +21,8 @@ This plan is only able to look at inputs and outputs and verify them against a g
 
 **Assumptions about the environment:** WIDTH and DEPTH of FIFO is 8, rd_en, wr_en, wr_data, perform their expected read and write operations. Ordering is strictly FIFO, synchronous First Word Fall Through (FWFT).
 (Add Assumptions)
+
+
 
 
 ## 2. Feature list
@@ -58,14 +60,14 @@ Coverpoints and their bins. A cross earns its place only if the interaction is w
 |----|-----------|------|----------------|
 | C1 |  Assert reset within all states of FIFO; empty, full, partially filled | rst_n | Ensure reset works in every state. |     
 | C2 | Assert write when FIFO is full, empty, not-empty. Use random, constrained data to generate input. | wr_en, wr_data|  Ensure write works in every state, including max-width input.  |
-| C3 | Assert read when FIFO is full, empty, not-empty. |rd_en, rd_data |        | Ensure read works in each state (full, empty, not-empty) |
-| C4 | Assert read/write at the same time when FIFO is neither full nor empty | rd_en, wr_en, count | Ensure count does not move and clock remains synchronous. |
+| C3 | Assert read when FIFO is full, empty, not-empty. |rd_en, rd_data | Ensure read works in each state (full, empty, not-empty) |
+| C4 | Assert read/write at the same time when FIFO is neither full nor empty | rd_en, wr_en, count | Ensure count does not move and the clock remains synchronous. |
 | C5 | Write will not force data wider than 8 bits into the FIFO | WIDTH=8, DEPTH=8  | Ensure writing to a full FIFO does not change the width or depth limits |
 | C6 | The design flags EMPTY when there is no data (0, not indeterminate)| empty = 1 | Ensure FIFO depth of 0 trips output flag, important for boundary operations and reading when empty |
 | C7 | The design trips FULL when it has 8 entries | full  = 1 |  Ensure FIFO depth of 8 trips output flag, important for boundary operations and writing when full |
 | C8 | The FIFO is filled in the order that wr_en is written, and FIFO is emptied in the same order by rd_en | wr_en, rd_en | Ensure data is read from queue in the order it is written |
 | C9 | Count progresses synchronously with each write (add) and read (subtract), except for on a synchronous read/write | count = depth | depth is the maximum length that count should be. |
-| C10 | Writing while full will result in dropped words | wr_en, wr_data |  | Ensure that writing when full does not go past Full Flag boundary.|
+| C10 | Writing while full will result in dropped words | wr_en, wr_data | Ensure that writing when full does not go past Full Flag boundary.|
 | C11 | Read while empty is ignored by the design | rd_en, rd_data | Ensure prevention of underflow conditions |
 | C12 | Boundary cases do not perturb the ordering and will either wrap-around or drop | DEPTH, WIDTH, COUNT | Check to make sure that ordering is preserved with cases that result in driving past Depth |
 | C13 | Random input still results in the correct ordering | wr_en, rd_en, random.seed(), rd_data, wr_data | Confirming correct ordering of the FIFO when adding in random inputs |
@@ -79,12 +81,10 @@ Coverpoints and their bins. A cross earns its place only if the interaction is w
 
 | ID | Cross | The interaction it is aimed at |
 |----|-------|-------------------------------|
-| X1 |  C8 x C9 x C13 | The FIFO keeps its ordering no matter the amount of reads/writes
-     | Order/memory errors that can occur without observance | 
-| X2 | C2 x C3 x C4 x C9 | Reading and writing from the FIFO maintains ordering, and behaves properly with R/W sequences, and full/empty FIFOs. |
-| X3 | C5 x C10 |Full behavior – writing to the FIFO will both not force data wider than 8 bits into the FIFO and will result in dropped words. |
-| X4 | C12 x C13 | Ordering is preserved during random cases and boundaries. |
-| X5 | C14 X C6 x C5 x C7 | Full and empty states are properly caught, and flagged.
+| X1 |  C8 x C9 x C13 | The FIFO keeps its ordering no matter the amount of reads/writes | Order/memory errors that can occur without observance | 
+| X2 | C2 x C3 x C4 x C9 x C10 x C11 | Reading and writing from the FIFO maintains ordering, and behaves properly with R/W sequences, and full/empty FIFOs. |
+| X3 | C12 x C13 | Ordering is preserved during random cases and boundaries. |
+| X4 | C14 X C5 x C6 x C7 | Full and empty states are properly caught, and flagged. |
 
 
 **Illegal / ignore bins:** <what is excluded and on what authority in the spec> 
@@ -101,7 +101,7 @@ An untraceable test is a test nobody can defend.
 | Test | Features | Kind | Pass criterion |
 |------|----------|------|----------------|
 | Assert reset during empty | F1 | directed | FIFO does not change, clock remains synchronous |
-| Assert reset during full | F1 | directed | FIFO count/depth goes to 0, clock remains synchronous, ordering after a reset remains FIFO
+| Assert reset during full | F1, F12 | directed | FIFO count/depth goes to 0, clock remains synchronous, ordering after a reset remains FIFO
 | Assert reset when !empty and !full | F1 | directed | FIFO count/depth goes to 0, clock remains synchronous, ordering after a reset remains FIFO
 | Write words of random width to the FIFO | F2, F8, F9 | directed | Words larger than WIDTH do not get shoved in, no illegal entries are pushed through.
 | Write words when full = 1 | F2, F11 | directed | When full, a write is dropped and the ordering does not change. 
@@ -111,7 +111,7 @@ An untraceable test is a test nobody can defend.
 | Read when full = 0, empty = 0 | F3, F11 | directed | Count should decrease, read order should be successful.
 | Multiple writes followed by multiple reads | F2, F3, F4, F5, F8 | directed | FIFO ordering stays in tact, no count change for simultaneous reads/writes.
 | Simultaneous read/write on boundary lines | F4, F11 | directed | read will not occur on empty, write will not occur on full, the count will change.
-| Write to full | F2, F6, F8, F11 | directed/asserted | FULL flag will trip, new words will be dropped, old data will not be corrupted.
+| Write to full | F2, F6, F8,F10, F11 | directed/asserted | FULL flag will trip, new words will be dropped, old data will not be corrupted.
 | Read to empty | F3, F7, F8, F11 | directed/asserted | Ordering will be respected, empty flag will trip, further reads will be ignored.
 | Many random writes | F2, F8, F11 | directed | Ordering is respected, full flags trip
 | Many random writes + reads | F2, F3, F8, F11 | directed/asserted | Respective flags are tripped, ordering is respected.
@@ -143,3 +143,6 @@ negotiation.
 - Mutation target: **18/20** on the hidden pool 
 - Assertions: every property paired with a passing `cover` (no vacuous passes)
 - What I will report as **not verified**: When read + write are simultaneous, they both happen – but what happens to the data?, Ordering of read + write during simultaneous read/writes. Which operation happens first?, After write into empty FIFO, when does rd_data show the new value?, Reset behavior: Does reset override simultaneous read/write requests?, and what happens to data during reset?
+
+
+
