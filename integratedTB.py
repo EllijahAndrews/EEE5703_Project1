@@ -520,7 +520,7 @@ async def test_seeded_random_regression(dut):
 
         txn.count = model.count
         #Randomize the transaction input.
-        txn.randomize(model.count)
+        txn.randomize()
 
         await check_cycle(
             dut,
@@ -544,7 +544,7 @@ async def test_multi_seed_regression(dut):
         10,
         100,
         1000,
-        12345
+        12345 
     ]
 
     #Loop through seed
@@ -555,6 +555,7 @@ async def test_multi_seed_regression(dut):
         random.seed(seed)
 
         txn = FifoTransaction()
+        txn.count = model.count
 
         dut._log.info(
             f"Starting seed {seed}"
@@ -562,7 +563,7 @@ async def test_multi_seed_regression(dut):
         #Loop through stimulus
         for _ in range(500):
 
-            txn.randomize(model.count)
+            txn.randomize()
 
             await check_cycle(
                 dut,
