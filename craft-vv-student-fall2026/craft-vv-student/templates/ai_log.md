@@ -16,7 +16,7 @@
 ## 2. Before
 
 
-**Prediction 1 — Predicting that the Ai assistant will not perform a simultaneous read+write when the FIFO is full or empty because the spec does not call that case out**
+**Prediction 1 — Predicting that the AI assistant will not perform a simultaneous read+write when the FIFO is full or empty because the spec does not call that case out**
 
 *Evidence that would show it: wr_en and rd_en signals will not be high when count is at DEPTH or 0.
 
@@ -88,7 +88,7 @@ just mutate fifo_crv
 |---|-----------|----------|---------|
 | 1 | No simultaneous wr + rd | wr_en happens on a Full FIFO|  refuted |
 
-| 2 | overconstraint on boundaries (wr on FUll, rd on empty) | [wr on FULL  ![alt text](image.png)]    | refuted  |
+| 2 | overconstraint on boundaries (wr on FUll, rd on empty) | wr on FULL  ![alt text](image.png)    | refuted  |
 
 
 **Anything I did not predict:**
