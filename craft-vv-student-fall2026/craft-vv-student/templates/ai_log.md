@@ -87,7 +87,6 @@ just mutate fifo_crv
 | # | Predicted | Observed | Verdict |
 |---|-----------|----------|---------|
 | 1 | No simultaneous wr + rd | wr_en happens on a Full FIFO|  refuted |
-
 | 2 | overconstraint on boundaries (wr on FUll, rd on empty) | wr on FULL  ![alt text](image.png)    | refuted  |
 
 
