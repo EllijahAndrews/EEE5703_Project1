@@ -87,31 +87,30 @@ just mutate fifo_crv
 | # | Predicted | Observed | Verdict |
 |---|-----------|----------|---------|
 | 1 | No simultaneous wr + rd | wr_en happens on a Full FIFO|  refuted |
-
-| 2 | overconstraint on boundaries (wr on FUll, rd on empty) | [wr on FULL  ![alt text](image.png)]    | refuted  |
-
+| 2 | overconstraint on boundaries (wr on FUll, rd on empty) | wr on FULL was obverved | refuted  |
+| 3 | Reads and writes will have equal weight | 
 
 **Anything I did not predict:**
+
+Something I didn't predict was how often the FIFO is filled being affected due to not having a kind of "phase" like in HW5. In HW5 the FIFO could walk towards being full or empty with the DRAIN/FILL design. 
 
 ---
 ## 4. Takeaway
 
-<!-- Name the CLASS of failure, not this instance, and connect it to a course
-     concept. Then one sentence on your own framing. If the machine was right,
-     say so plainly — you are graded on the verification, never on finding a
-     failure. -->
-
 **The class of failure (or of success):**
+Constraint set failure 
 
 **Where it connects:**
+This connects to week 5 of our lectures where we learn to properly set constraints to test our edge cases thoroughly. 
 
 **What I would change in how I framed the request:**
+To lessen the upfront code conversion, the specific environemnt (cocotb, etc) that is being worked in should be given. Give our own feature list that gives the tool more direction on how to write the testbench.
 
 ---
 
 ## Disclosure
 
-- [ ] Every prompt above is verbatim and complete.
-- [ ] I have marked every edit I made to the generated output.
-- [ ] The tool is described by class, not by product name.
-- [ ] Section 2 was written before the prompt was sent.
+- [x] Every prompt above is verbatim and complete.
+- [x] I have marked every edit I made to the generated output.
+- [x] The tool is described by class, not by product name.
+- [x] Section 2 was written before the prompt was sent.
