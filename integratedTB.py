@@ -590,7 +590,7 @@ async def test_burst_random_regression(dut):
 
     model = await setup_fifo(dut)
 
-    seed = 12345
+    seed = 13030
     random.seed(seed)
 
     burst = BurstDriver()
