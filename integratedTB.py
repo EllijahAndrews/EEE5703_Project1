@@ -23,6 +23,24 @@ import vsc
 FIFO_DEPTH = 8
 FIFO_WIDTH = 8
 
+# ============================================================
+# FIFO COVERAGE REPORT
+# ============================================================
+
+def fifo_coverage():
+
+    print("\n")
+    print("==============================================")
+    print("          FIFO FUNCTIONAL COVERAGE")
+    print("==============================================")
+
+    # Print PyVSC coverage details.
+    vsc.report_coverage(details=True)
+
+    print("==============================================")
+    print("          END OF COVERAGE REPORT")
+    print("==============================================")
+    print("\n")
 @vsc.covergroup
 class FifoCoverage(object):
     def __init__(self):
@@ -61,7 +79,22 @@ class FifoCoverage(object):
         # C1 / section 8: reset asserted in each state, with and without traffic
         self.cross_rst_state = vsc.cross([self.cp_rst, self.cp_state, self.cp_wr, self.cp_rd])
 
- 
+fifo_cov = FifoCoverage()  #Global coverage instance
+
+def fifo_coverage():
+
+    print("\n")
+    print("==============================================")
+    print("          FIFO FUNCTIONAL COVERAGE")
+    print("==============================================")
+
+    #Print PyVSC coverage details
+    vsc.report_coverage(details=True)
+
+    print("==============================================")
+    print("          END OF COVERAGE REPORT")
+    print("==============================================")
+    print("\n")
 
 # ============================================================
 # PYVSC Fifo Transaction Class
@@ -288,6 +321,10 @@ def monitor(dut):
 
 async def check_cycle(dut, model, wr_en=0, rd_en=0, wr_data=0):
 
+    #Capture pre-edge values
+    pre_count = model.count #occupancy count before transaction
+    rst_n = int(dut.rst_n.value) #reset state before transaction
+ 
     #
     # Predict next state using the golden model.
     # The model uses pre-edge state exactly like the DUT.
@@ -306,6 +343,14 @@ async def check_cycle(dut, model, wr_en=0, rd_en=0, wr_data=0):
         wr_en=wr_en,
         rd_en=rd_en,
         wr_data=wr_data,
+    )
+    
+    #Functional Coverage
+    fifo_cov.sample(
+        pre_count,
+        wr_en,
+        rd_en,
+        int(dut.rst_n.value)
     )
 
     #
@@ -336,6 +381,7 @@ async def check_cycle(dut, model, wr_en=0, rd_en=0, wr_data=0):
             f"RD_DATA mismatch: expected=0x{model.head:02x} "
             f"got=0x{actual['rd_data']:02x}"
         )
+    
 
 
 # ============================================================
@@ -554,7 +600,7 @@ async def test_reset_while_partially_full(dut):
         "Starting reset-while-partially-full test"
     )
     
-    amt = 5
+    amt = 5 #dynamic fifo fill-to amount
 
     #Fill FIFO to amount set (current is 5)
     for i in range(amt):
@@ -574,31 +620,43 @@ async def test_reset_while_partially_full(dut):
 
     #Assert reset while data exists in FIFO
     await FallingEdge(dut.clk)
-
+    
     dut.wr_en.value = 0
     dut.rd_en.value = 0
     dut.rst_n.value = 0
-
+    
+    #Save occupancy before resetting the model
+    pre_count = model.count
+    
     #Reset reference model too
     model.reset()
-
+    
     #Hold reset for three clock cycles
-    for _ in range(3):
+    for reset_cycle in range(3):
+    
         await RisingEdge(dut.clk)
         await Timer(1, units="ns")
-
-        #Verify reset behavior
-        assert int(dut.count.value) == 0, (
-            "FIFO count did not clear during reset"
-        )
-
-        assert int(dut.empty.value) == 1, (
-            "FIFO empty flag not asserted during reset"
-        )
-
-        assert int(dut.full.value) == 0, (
-            "FIFO full flag not cleared during reset"
-        )
+    
+        #Sample reset coverage since this reset does not check using check_cycle
+        if reset_cycle == 0:
+            fifo_cov.sample( #had to reconfigure due to syntax error
+              pre_count,
+              0,
+              0,
+              0
+            )
+        else:
+            fifo_cov.sample(
+                0,
+                0,
+                0,
+                0
+            )
+    
+        #Verify reset behavior.
+        assert int(dut.count.value) == 0
+        assert int(dut.empty.value) == 1
+        assert int(dut.full.value) == 0
 
 
     #Release reset
@@ -757,5 +815,8 @@ async def test_burst_random_regression(dut):
         "Burst random regression passed"
     )
     
-fifo_cov = FifoCoverage() 
+    #print accumulated coverage WARNING: all seeds
+    fifo_coverage()
+    
+
 
