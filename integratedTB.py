@@ -698,7 +698,7 @@ async def test_seeded_random_regression(dut):
 
     model = await setup_fifo(dut)
 
-    seed = 1337
+    seed = 12345
     random.seed(seed)
 
     #Define class.
