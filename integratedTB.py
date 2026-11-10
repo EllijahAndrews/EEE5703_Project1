@@ -20,11 +20,52 @@ import random
 #PYVSC CLASS IMPORT
 import vsc
 
+FIFO_DEPTH = 8
+FIFO_WIDTH = 8
+
+@vsc.covergroup
+class FifoCoverage(object):
+    def __init__(self):
+        # Values passed to sample(), in this order
+        self.with_sample(dict(
+            count=vsc.uint8_t(),   # PRE-edge occupancy
+            wr_en=vsc.bit_t(1),
+            rd_en=vsc.bit_t(1),
+            rst_n=vsc.bit_t(1),
+        ))
+
+        # Occupancy: one bin per level (fills the occupancy table, C9/C12)
+        self.cp_occ = vsc.coverpoint(
+            self.count,
+            bins={f"occ_{i}": vsc.bin(i) for i in range(FIFO_DEPTH + 1)}
+        )
+
+        # FIFO state: empty / mid / full (C2, C3, C6, C7)
+        self.cp_state = vsc.coverpoint(
+            self.count,
+            bins=dict(
+                empty=vsc.bin(0),
+                mid=vsc.bin([1, FIFO_DEPTH - 1]),
+                full=vsc.bin(FIFO_DEPTH),
+            )
+        )
+
+        self.cp_wr = vsc.coverpoint(self.wr_en, bins=dict(off=vsc.bin(0), on=vsc.bin(1)))
+        self.cp_rd = vsc.coverpoint(self.rd_en, bins=dict(off=vsc.bin(0), on=vsc.bin(1)))
+        self.cp_rst = vsc.coverpoint(self.rst_n, bins=dict(asserted=vsc.bin(0), released=vsc.bin(1)))
+
+        # X2 / section 8: op x state. 2x2x3 = 12 bins, including the
+        # undefined/illegal combos (rd+wr at empty, rd+wr at full, wr at full, rd at empty)
+        self.cross_op_state = vsc.cross([self.cp_wr, self.cp_rd, self.cp_state])
+ 
+        # C1 / section 8: reset asserted in each state, with and without traffic
+        self.cross_rst_state = vsc.cross([self.cp_rst, self.cp_state, self.cp_wr, self.cp_rd])
+
+ 
+
 # ============================================================
 # PYVSC Fifo Transaction Class
 # ============================================================
-FIFO_DEPTH = 8
-FIFO_WIDTH = 8
 
 @vsc.randobj
 class FifoTransaction:
@@ -46,16 +87,16 @@ class FifoTransaction:
 
     #No illegal transactions. Constrain operational codes
     #It would be useless to generate stimulus that gets ignored anyhow. Skip these and focus on more usefull stimuli.
-    @vsc.constraint
-    def legal_ops_c(self):
-
-        with vsc.if_then(self.count == 0):
-            #Empty FIFO
-            self.rd_en == 0
-
-        with vsc.if_then(self.count == FIFO_DEPTH):
-            #Full FIFO
-            self.wr_en == 0
+#    @vsc.constraint
+#    def legal_ops_c(self):
+#
+#        with vsc.if_then(self.count == 0):
+#            #Empty FIFO
+#            self.rd_en == 0
+#
+#        with vsc.if_then(self.count == FIFO_DEPTH):
+#            #Full FIFO
+#            self.wr_en == 0
 
     #Skew read/write frequency to avoid useless scenarios or equal rd/wr distribution.
     @vsc.constraint
@@ -156,8 +197,8 @@ class BurstDriver:
             rd_en = 0
 
         #Prevent illegal operations
-        if occupancy == 0:
-            rd_en = 0
+#        if occupancy == 0:
+#            rd_en = 0
 
         if occupancy == FIFO_DEPTH:
             wr_en = 0
@@ -502,6 +543,92 @@ async def test_random_interleave(dut):
         )
 
     dut._log.info("Random interleave test passed")
+
+#Test to reset while partially full
+@cocotb.test()
+async def test_reset_while_partially_full(dut):
+
+    model = await setup_fifo(dut)
+
+    dut._log.info(
+        "Starting reset-while-partially-full test"
+    )
+    
+    amt = 5
+
+    #Fill FIFO to amount set (current is 5)
+    for i in range(amt):
+        await check_cycle(
+            dut,
+            model,
+            wr_en=1,
+            rd_en=0,
+            wr_data=0x40 + i
+        )
+
+    assert model.count == 5
+
+    dut._log.info(
+        f"FIFO partially full: count={model.count}"
+    )
+
+    #Assert reset while data exists in FIFO
+    await FallingEdge(dut.clk)
+
+    dut.wr_en.value = 0
+    dut.rd_en.value = 0
+    dut.rst_n.value = 0
+
+    #Reset reference model too
+    model.reset()
+
+    #Hold reset for three clock cycles
+    for _ in range(3):
+        await RisingEdge(dut.clk)
+        await Timer(1, units="ns")
+
+        #Verify reset behavior
+        assert int(dut.count.value) == 0, (
+            "FIFO count did not clear during reset"
+        )
+
+        assert int(dut.empty.value) == 1, (
+            "FIFO empty flag not asserted during reset"
+        )
+
+        assert int(dut.full.value) == 0, (
+            "FIFO full flag not cleared during reset"
+        )
+
+
+    #Release reset
+    dut.rst_n.value = 1
+
+    await FallingEdge(dut.clk)
+
+    #Verify FIFO ordering has not been perturbed after reset
+    for i in range(3):
+        await check_cycle(
+            dut,
+            model,
+            wr_en=1,
+            rd_en=0,
+            wr_data=0xA0 + i
+        )
+
+    for _ in range(3):
+        await check_cycle(
+            dut,
+            model,
+            wr_en=0,
+            rd_en=1
+        )
+
+    assert model.empty
+
+    dut._log.info(
+        "Reset while partially full test passed"
+    )
     
 # ============================================================
 # Seeded Random Regression
@@ -590,7 +717,7 @@ async def test_burst_random_regression(dut):
 
     model = await setup_fifo(dut)
 
-    seed = 13030
+    seed = 12345
     random.seed(seed)
 
     burst = BurstDriver()
@@ -629,3 +756,6 @@ async def test_burst_random_regression(dut):
     dut._log.info(
         "Burst random regression passed"
     )
+    
+fifo_cov = FifoCoverage() 
+
