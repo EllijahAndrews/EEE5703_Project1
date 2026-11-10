@@ -96,6 +96,56 @@ def fifo_coverage():
     print("==============================================")
     print("\n")
 
+#Added a checkpoint for each transaction checkpoint rather than the fulkl coverage
+def coverage_checkpoint(dut, interval=100):
+
+    if transaction_count % interval == 0:
+
+        dut._log.info(
+            f"========== COVERAGE CHECKPOINT =========="
+        )
+
+        dut._log.info(
+            f"Transactions: {transaction_count}"
+        )
+
+        vsc.report_coverage(details=False)
+
+        dut._log.info(
+            f"=========================================="
+        )
+
+# ============================================================
+# Transaction Counter
+# ============================================================
+
+transaction_count = 0
+coverage_history = []
+
+#Specific reseet transaction counter for partial-full-reset
+def reset_transaction_counter():
+    global transaction_count
+    transaction_count = 0
+
+def increment_transaction_count():
+    global transaction_count
+    transaction_count += 1
+    return transaction_count
+
+def update_coverage(dut):
+    global transaction_count
+
+    transaction_count += 1
+
+    #Print coverage every 100 transactions
+    if transaction_count % 100 == 0:
+
+        dut._log.info(
+            f"Transactions: {transaction_count}"
+        )
+
+        vsc.report_coverage()
+        
 # ============================================================
 # PYVSC Fifo Transaction Class
 # ============================================================
@@ -353,6 +403,12 @@ async def check_cycle(dut, model, wr_en=0, rd_en=0, wr_data=0):
         int(dut.rst_n.value)
     )
 
+    #Increment transaction counter
+    increment_transaction_count()
+
+    #Report coverage every 100 transactions
+    coverage_checkpoint(dut, interval=100)
+    
     #
     # Monitor DUT
     #
@@ -452,6 +508,7 @@ async def test_fifo_layered(dut):
     )
 
     dut._log.info("Layered FIFO test passed")
+    
 
 async def setup_fifo(dut):
     cocotb.start_soon(
@@ -477,6 +534,8 @@ async def setup_fifo(dut):
 @cocotb.test()
 async def test_fill_to_full(dut):
 
+    reset_transaction_counter() #Reset transaction counter
+
     model = await setup_fifo(dut)
 
     for i in range(8):
@@ -492,6 +551,8 @@ async def test_fill_to_full(dut):
 
 @cocotb.test()
 async def test_write_while_full(dut):
+
+    reset_transaction_counter() #Reset transaction counter
 
     model = await setup_fifo(dut)
 
@@ -511,6 +572,8 @@ async def test_write_while_full(dut):
 @cocotb.test()
 async def test_read_while_empty(dut):
 
+    reset_transaction_counter() #Reset transaction counter
+
     model = await setup_fifo(dut)
 
     await check_cycle(
@@ -524,6 +587,8 @@ async def test_read_while_empty(dut):
 
 @cocotb.test()
 async def test_simultaneous_read_write(dut):
+
+    reset_transaction_counter() #Reset transaction counter
 
     model = await setup_fifo(dut)
 
@@ -543,6 +608,8 @@ async def test_simultaneous_read_write(dut):
 
 @cocotb.test()
 async def test_pointer_wraparound(dut):
+
+    reset_transaction_counter() #Reset transaction counter
 
     model = await setup_fifo(dut)
 
@@ -565,6 +632,8 @@ async def test_pointer_wraparound(dut):
 
 @cocotb.test()
 async def test_random_interleave(dut):
+
+    reset_transaction_counter() #Reset transaction counter
 
     model = await setup_fifo(dut)
 
@@ -593,6 +662,8 @@ async def test_random_interleave(dut):
 #Test to reset while partially full
 @cocotb.test()
 async def test_reset_while_partially_full(dut):
+
+    reset_transaction_counter() #Reset transaction counter
 
     model = await setup_fifo(dut)
 
@@ -640,10 +711,10 @@ async def test_reset_while_partially_full(dut):
         #Sample reset coverage since this reset does not check using check_cycle
         if reset_cycle == 0:
             fifo_cov.sample( #had to reconfigure due to syntax error
-              pre_count,
-              0,
-              0,
-              0
+                pre_count,
+                0,
+                0,
+                0
             )
         else:
             fifo_cov.sample(
@@ -652,6 +723,8 @@ async def test_reset_while_partially_full(dut):
                 0,
                 0
             )
+
+        update_coverage(dut)
     
         #Verify reset behavior.
         assert int(dut.count.value) == 0
@@ -696,6 +769,8 @@ async def test_reset_while_partially_full(dut):
 @cocotb.test()
 async def test_seeded_random_regression(dut):
 
+    reset_transaction_counter() #Reset transaction counter
+
     model = await setup_fifo(dut)
 
     seed = 12345
@@ -718,14 +793,19 @@ async def test_seeded_random_regression(dut):
             rd_en=txn.rd_en,
             wr_data=txn.wr_data
         )
+        
+    fifo_coverage()
 
     dut._log.info(
         "Single-seeded random regression passed"
     )
+    
 
 #Coverage across multiple seeds.
 @cocotb.test()
 async def test_multi_seed_regression(dut):
+
+    reset_transaction_counter() #Reset transaction counter
 
     #Array of seeds to use.
     seeds = [
@@ -761,10 +841,13 @@ async def test_multi_seed_regression(dut):
                 rd_en=txn.rd_en,
                 wr_data=txn.wr_data
             )
+            
+    fifo_coverage()
         
     dut._log.info(
         "Multi-seeded random regression passed"
     )
+    
     
 # ============================================================
 # Burst Random Regression
@@ -772,6 +855,8 @@ async def test_multi_seed_regression(dut):
 
 @cocotb.test()
 async def test_burst_random_regression(dut):
+
+    reset_transaction_counter() #Reset transaction counter
 
     model = await setup_fifo(dut)
 
@@ -815,8 +900,13 @@ async def test_burst_random_regression(dut):
         "Burst random regression passed"
     )
     
+    #Transaction log
+    dut._log.info(
+        f"Seed {seed} completed "
+        f"after {transaction_count} transactions"
+    )
+
     #print accumulated coverage WARNING: all seeds
     fifo_coverage()
     
-
 
