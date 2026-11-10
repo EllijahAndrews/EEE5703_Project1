@@ -4,51 +4,57 @@
 # FIFO transaction class must be imported so that pyvsc is implemented and constrained properly.
 
 #Burst helper function.
-def next_burst(self, occupancy):
+class BurstDriver:
 
-    if self.burst_remaining == 0:
+    def __init__(self):
+        self.burst_remaining = 0
+        self.burst_mode = "idle"
 
-        #Random stimulus choice.
-        self.burst_mode = random.choice([
-            "write",
-            "read",
-            "rw",
-            "idle"
-        ])
+    def next_burst(self, occupancy):
 
-        self.burst_remaining = random.randint(2, 8)
+        #Select a new burst when the previous one finishes
+        if self.burst_remaining == 0:
 
-    self.burst_remaining -= 1
+            self.burst_mode = random.choice([
+                "write",
+                "read",
+                "rw",
+                "idle"
+            ])
 
-    #Write burst.
-    if self.burst_mode == "write":
-        self.wr_en = 1
-        self.rd_en = 0
+            self.burst_remaining = random.randint(2, 8)
 
-    #REad burst.
-    elif self.burst_mode == "read":
-        self.wr_en = 0
-        self.rd_en = 1
+        self.burst_remaining -= 1
 
-    #Simultaneous read write.
-    elif self.burst_mode == "rw":
-        self.wr_en = 1
-        self.rd_en = 1
+        #Generate operations based on burst mode
+        if self.burst_mode == "write":
+            wr_en = 1
+            rd_en = 0
 
-    #Aything else.
-    else:
-        self.wr_en = 0
-        self.rd_en = 0
+        elif self.burst_mode == "read":
+            wr_en = 0
+            rd_en = 1
 
-    #Randomized data.
-    self.wr_data = random.randint(0,255)
+        elif self.burst_mode == "rw":
+            wr_en = 1
+            rd_en = 1
 
-    #No illegal transactions.
-    if occupancy == 0:
-        self.rd_en = 0
+        else:
+            wr_en = 0
+            rd_en = 0
 
-    if occupancy == FIFO_DEPTH:
-        self.wr_en = 0
+        #Prevent illegal operations
+#        if occupancy == 0:
+#            rd_en = 0
+
+        if occupancy == FIFO_DEPTH:
+            wr_en = 0
+
+        #Random write data
+        wr_data = random.randint(0, 255)
+
+        return wr_en, rd_en, wr_data
+
 
 #Seeded random regression test with one seed.
 @cocotb.test()
@@ -122,4 +128,51 @@ async def test_multi_seed_regression(dut):
     dut._log.info(
         "Multi-seeded random regression passed"
     )
+
+#Burst test
+@cocotb.test()
+async def test_burst_random_regression(dut):
+
+    model = await setup_fifo(dut)
+
+    seed = 12345
+    random.seed(seed)
+
+    burst = BurstDriver()
+
+    dut._log.info(
+        f"Starting burst regression with seed={seed}"
+    )
+
+    #Generate 1000 burst-driven transactions
+    for cycle_num in range(1000):
+
+        #Generate next burst transaction
+        wr_en, rd_en, wr_data = burst.next_burst(
+            model.count
+        )
+
+        dut._log.info(
+            f"Cycle={cycle_num} "
+            f"Burst={burst.burst_mode} "
+            f"Remaining={burst.burst_remaining} "
+            f"WR={wr_en} "
+            f"RD={rd_en} "
+            f"DATA=0x{wr_data:02X} "
+            f"COUNT={model.count}"
+        )
+
+        #Drive DUT and check against golden model
+        await check_cycle(
+            dut,
+            model,
+            wr_en=wr_en,
+            rd_en=rd_en,
+            wr_data=wr_data
+        )
+
+    dut._log.info(
+        "Burst random regression passed"
+    )
+    
         
