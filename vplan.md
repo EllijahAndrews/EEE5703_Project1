@@ -19,8 +19,7 @@ Verifies all behaviour listed in spec for synchronous FIFO, including reset, wri
 This plan is only able to look at inputs and outputs and verify them against a golden model. It is not able to view the internal DUT and assess what goes on in memory. For example, an ordering issue in memory that does not affect the outputs may be missed by this plan.
 
 
-**Assumptions about the environment:** WIDTH and DEPTH of FIFO is 8, rd_en, wr_en, wr_data, perform their expected read and write operations. Ordering is strictly FIFO, synchronous First Word Fall Through (FWFT).
-(Add Assumptions)
+**Assumptions about the environment:** WIDTH and DEPTH of FIFO is 8, rd_en, wr_en, wr_data, perform their expected read and write operations. Ordering is strictly FIFO, synchronous First Word Fall Through (FWFT). Provided Simulators are working correctly (Icarus, Verilator).
 
 
 
