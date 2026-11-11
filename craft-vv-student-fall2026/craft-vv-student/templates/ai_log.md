@@ -38,7 +38,68 @@
 
 ## 3. After
 
+LLM Response:
 
+Verification Plan: Synchronous FWFT FIFO
+Target DUT: dut/fifo.sv | Author: Verification Engineering
+1. ARCHITECTURE & VERIFICATION STRATEGY
+This document establishes a complete verification specification for the parameterized synchronous First-Word
+Fall-Through (FWFT) FIFO. The testbench framework utilizes a shadow reference model implemented via a
+std::queue within an interactive scoreboard environment.
+    DUT Parameters: WIDTH (default 8), DEPTH (default 8).
+    FWFT Check Rule: Data output rd_data continuously reflects shadow queue head queue[0] whenever !empty.
+    Flag Checks: empty == (queue.size() == 0), full == (queue.size() == DEPTH), and count == queue.size() verified on every active clock edge.
+2. FUNCTIONAL COVERAGE MODEL (FIFO_COVERGROUP)
+covergroup fifo_covergroup @(posedge clk disable iff (!rst_n));
+    // Single Signals
+    cp_wr_en: coverpoint wr_en { bins disabled = {0}; bins enabled = {1}; }
+    cp_rd_en: coverpoint rd_en { bins disabled = {0}; bins enabled = {1}; }
+    cp_full:  coverpoint full  { bins not_full  = {0}; bins is_full = {1}; }
+    cp_empty: coverpoint empty { bins not_empty = {0}; bins is_empty = {1}; }
+    // Occupancy Tracking
+    cp_count: coverpoint count {
+    bins empty_state = {0};
+    bins one_entry   = {1};
+    bins mid_range   = {[2 : DEPTH-2]};
+    bins full_minus1 = {DEPTH-1};
+    bins max_full    = {DEPTH};
+}
+
+// Crosses
+cross_wr_full:  cross cp_wr_en, cp_full { bins wr_when_full = binsof(cp_wr_en.enabled) && 
+binsof(cp_full.is_full); }
+cross_rd_empty: cross cp_rd_en, cp_empty { bins rd_when_empty = binsof(cp_rd_en.enabled) 
+&& binsof(cp_empty.is_empty); }
+cross_count_op: cross cp_count, cp_wr_en, cp_rd_en;
+endgroup
+
+3. TRANSACTION CONSTRAINTS (FIFO_TRANSACTION.SV)
+class fifo_transaction #(parameter WIDTH = 8) extends uvm_sequence_item;
+  rand bit              wr_en;
+  rand bit              rd_en;
+  rand bit [WIDTH-1:0]  wr_data;
+  typedef enum { NOP, WRITE_ONLY, READ_ONLY, SIMULTANEOUS } op_mode_e;
+  rand op_mode_e op_mode;
+  constraint c_op_weights {
+    op_mode dist { NOP :/ 10, WRITE_ONLY :/ 35, READ_ONLY :/ 35, SIMULTANEOUS :/ 20 };
+  }
+  constraint c_signal_mapping {
+    (op_mode == NOP)          -> { wr_en == 0; rd_en == 0; }
+    (op_mode == WRITE_ONLY)   -> { wr_en == 1; rd_en == 0; }
+    (op_mode == READ_ONLY)    -> { wr_en == 0; rd_en == 1; }
+    (op_mode == SIMULTANEOUS) -> { wr_en == 1; rd_en == 1; }
+  }
+endclass
+
+4. TEST SCENARIO CHECKLIST & CORNER CASES
+Test Scenario             Stimulus Sequence                             Pass Criterion
+Reset Verification        Assert rst_n=0 mid-transaction.               count=0, empty=1, full=0 on next edge.
+Write-while-Full          Drive wr_en=1 when count == DEPTH.            Write dropped, no count change or memory corruption.
+Read-while-Empty          Drive rd_en=1 when count == 0.                Read ignored, no underflow occurs.
+Simultaneous R+W          Assert wr_en=1 and rd_en=1 simultaneously     Data popped/pushed on same edge; count unchanged.
+Pointer Wrap-around       Run continuous interleaved operations for     No data corruption or pointer misalignments observed.
+                          > 2×DEPTH cycles.
+                                                
 
 **What I ran:**
 
@@ -115,3 +176,6 @@ To lessen the upfront code conversion, the specific environemnt (cocotb, etc) th
 - [x] I have marked every edit I made to the generated output.
 - [x] The tool is described by class, not by product name.
 - [x] Section 2 was written before the prompt was sent.
+
+
+
