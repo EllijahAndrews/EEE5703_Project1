@@ -1,10 +1,10 @@
 # Check the Machine — ai_log.md
 
-**Name: Ellijah, Lakshmi, Hailey, Ilona**
-**Section:EEE 5703**
+**Name: Ellijah, Lakshmi, Hailey, Lona**
+**Section: EEE 5703**
 **Week: Project 1**
-**Autonomy tier:self-directed**
-**Assistant used:a general-purpose LLM**
+**Autonomy tier: self-directed**
+**Assistant used: a general-purpose LLM**
 
 ---
 
