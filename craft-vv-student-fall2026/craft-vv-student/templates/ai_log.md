@@ -1,10 +1,10 @@
 # Check the Machine — ai_log.md
 
-**Name: Ellijah, Lakshmi, Hailey, Ilona**
-**Section:EEE 5703**
+**Name: Ellijah, Lakshmi, Hailey, Lona**
+**Section: EEE 5703**
 **Week: Project 1**
-**Autonomy tier:self-directed**
-**Assistant used:a general-purpose LLM**
+**Autonomy tier: self-directed**
+**Assistant used: a general-purpose LLM**
 
 ---
 
@@ -16,15 +16,14 @@
 ## 2. Before
 
 
-**Prediction 1 — Predicting that the Ai assistant will not perform a simultaneous read+write when the FIFO is full or empty because the spec does not call that case out**
+**Prediction 1 — Predicting that the AI assistant will not perform a simultaneous read+write when the FIFO is full or empty because the spec does not call that case out**
 
-*Evidence that would show it:* the count of cycles with `rd_en` and `wr_en` both high while the model occupancy is 0 or DEPTH (or hits in the (empty, simul) and (full, simul) cross cells), plus whether the generated constraints contain any occupancy-dependent guard on the simultaneous operation.
+*Evidence that would show it: wr_en and rd_en signals will not be high when count is at DEPTH or 0.
 
-**Prediction 2 - Overconstraint on "read on empty" and "write on full". These will never be exercised because those actions will be deemed as illegal.**
-*Evidence that would show it:* the `rd_empty` and `wr_full` counters from the scoreboard (both would be 0 on a long run), and any `implies` guard in the constraints that forces `wr_en == 0` at full or `rd_en == 0` at empty.
+**Prediction 2 - Overconstraint on "read on empty" and "write on full". These will never be exercised because those actions will be deemed as illegal.** 
+*Evidence that would show it:* wr_en will not be high when count is at DEPTH. rd_en will not be high when count is at  0.
 
-**Prediction 3 - Reads and writes will have equal weight throughout the process of filling the FIFO. There will be no phase implementation like in HW5.**
-*Evidence that would show it:* a probe of P(wr) and P(rd) with no difference by occupancy, and an occupancy histogram with little time at 0 and DEPTH (fewer cycles at full than the phase-based class over the same run).
+**Prediction 3 - Reads and writes will have equal weight throughout the process of filling the FIFO. There will be no phase implementation like in HW5.** Equal weighted probablility for reads and writes at each value of count or the lack of any weight would be valid evidence that a type of "phase" is not implemented. 
 
 
 **Review criteria I am checking against:**
@@ -34,73 +33,140 @@
 3. Every requirement in the spec has at least one row for the coverage.
 
 
-
+**What was edited: Constraint block ported from SystemVerilog/UVM to pyvsc with help from a second general-purpose LLM; I changed uvm_sequence_item to @vsc.randobj, rand int to a 2-bit field, and dropped the redundant bounds constraint.**
 ---
 
 ## 3. After
 
+LLM Response:
+
+Verification Plan: Synchronous FWFT FIFO
+Target DUT: dut/fifo.sv | Author: Verification Engineering
+1. ARCHITECTURE & VERIFICATION STRATEGY
+This document establishes a complete verification specification for the parameterized synchronous First-Word
+Fall-Through (FWFT) FIFO. The testbench framework utilizes a shadow reference model implemented via a
+std::queue within an interactive scoreboard environment.
+    DUT Parameters: WIDTH (default 8), DEPTH (default 8).
+    FWFT Check Rule: Data output rd_data continuously reflects shadow queue head queue[0] whenever !empty.
+    Flag Checks: empty == (queue.size() == 0), full == (queue.size() == DEPTH), and count == queue.size() verified on every active clock edge.
+2. FUNCTIONAL COVERAGE MODEL (FIFO_COVERGROUP)
+covergroup fifo_covergroup @(posedge clk disable iff (!rst_n));
+    // Single Signals
+    cp_wr_en: coverpoint wr_en { bins disabled = {0}; bins enabled = {1}; }
+    cp_rd_en: coverpoint rd_en { bins disabled = {0}; bins enabled = {1}; }
+    cp_full:  coverpoint full  { bins not_full  = {0}; bins is_full = {1}; }
+    cp_empty: coverpoint empty { bins not_empty = {0}; bins is_empty = {1}; }
+    // Occupancy Tracking
+    cp_count: coverpoint count {
+    bins empty_state = {0};
+    bins one_entry   = {1};
+    bins mid_range   = {[2 : DEPTH-2]};
+    bins full_minus1 = {DEPTH-1};
+    bins max_full    = {DEPTH};
+}
+
+// Crosses
+cross_wr_full:  cross cp_wr_en, cp_full { bins wr_when_full = binsof(cp_wr_en.enabled) && 
+binsof(cp_full.is_full); }
+cross_rd_empty: cross cp_rd_en, cp_empty { bins rd_when_empty = binsof(cp_rd_en.enabled) 
+&& binsof(cp_empty.is_empty); }
+cross_count_op: cross cp_count, cp_wr_en, cp_rd_en;
+endgroup
+
+3. TRANSACTION CONSTRAINTS (FIFO_TRANSACTION.SV)
+class fifo_transaction #(parameter WIDTH = 8) extends uvm_sequence_item;
+  rand bit              wr_en;
+  rand bit              rd_en;
+  rand bit [WIDTH-1:0]  wr_data;
+  typedef enum { NOP, WRITE_ONLY, READ_ONLY, SIMULTANEOUS } op_mode_e;
+  rand op_mode_e op_mode;
+  constraint c_op_weights {
+    op_mode dist { NOP :/ 10, WRITE_ONLY :/ 35, READ_ONLY :/ 35, SIMULTANEOUS :/ 20 };
+  }
+  constraint c_signal_mapping {
+    (op_mode == NOP)          -> { wr_en == 0; rd_en == 0; }
+    (op_mode == WRITE_ONLY)   -> { wr_en == 1; rd_en == 0; }
+    (op_mode == READ_ONLY)    -> { wr_en == 0; rd_en == 1; }
+    (op_mode == SIMULTANEOUS) -> { wr_en == 1; rd_en == 1; }
+  }
+endclass
+
+4. TEST SCENARIO CHECKLIST & CORNER CASES
+Test Scenario             Stimulus Sequence                             Pass Criterion
+Reset Verification        Assert rst_n=0 mid-transaction.               count=0, empty=1, full=0 on next edge.
+Write-while-Full          Drive wr_en=1 when count == DEPTH.            Write dropped, no count change or memory corruption.
+Read-while-Empty          Drive rd_en=1 when count == 0.                Read ignored, no underflow occurs.
+Simultaneous R+W          Assert wr_en=1 and rd_en=1 simultaneously     Data popped/pushed on same edge; count unchanged.
+Pointer Wrap-around       Run continuous interleaved operations for     No data corruption or pointer misalignments observed.
+                          > 2×DEPTH cycles.
+                                                
+
 **What I ran:**
 
-Only the constraint block was tested. It was ported from SystemVerilog/UVM to pyvsc as `LlmTxn` (`llm_txn.py`) and driven through the same driver, monitor and reference-queue scoreboard as the phase-based `FifoTxn` from HW5. The plan's directed sequences and its coverage model were not run. Seed `0xC0FFEE` in every run.
-
 ```bash
-TXN=llm N_CYCLES=100 just test fifo_crv icarus      # LLM transaction, 100 cycles
-N_CYCLES=100 just test fifo_crv icarus              # phase-based transaction, 100 cycles
+
 TXN=llm just test fifo_crv icarus                   # LLM transaction, 3000 cycles
 just test fifo_crv icarus                           # phase-based transaction, 3000 cycles
+
+
+TXN=llm N_CYCLES=3000 just mutate fifo_crv
+just mutate fifo_crv
 ```
 
 **Raw output:**
 
 ```text
-transaction = LlmTxn  seed = 0xc0ffee  cycles = 100
-occupancy 0:23 1:33 2:22 3:9 4:7 5:5 6:1 7:0 8:0  wr_full 0 rd_empty 11 both 19
-test_crv failed
-AssertionError: stimulus never wrote into a full FIFO
+All tested on the same seed to compare CTM against HW5.
 
-transaction = FifoTxn  seed = 0xc0ffee  cycles = 100
-occupancy 0:12 1:17 2:5 3:15 4:12 5:13 6:12 7:5 8:9  wr_full 7 rd_empty 9 both 36
-test_crv passed
 
-transaction = LlmTxn  seed = 0xc0ffee  cycles = 3000
+--------3000 Cycle llmTXN--------
+TXN=llm just test fifo_crv icarus 
+LlmTxn  seed = 0xc0ffee  cycles = 3000
 occupancy 0:395 1:543 2:411 3:364 4:307 5:268 6:254 7:276 8:182  wr_full 99 rd_empty 224 both 506
 test_crv passed
 
-transaction = FifoTxn  seed = 0xc0ffee  cycles = 3000
+just test fifo_crv icarus   
+------3000 Cycle HW5 benchmark------ 
+FifoTxn  seed = 0xc0ffee  cycles = 3000
 occupancy 0:383 1:653 2:470 3:393 4:320 5:209 6:154 7:175 8:243  wr_full 164 rd_empty 295 both 977
-test_crv passed
+test_crv passed'
+
+
+
+TXN=llm N_CYCLES=3000 just mutate fifo_crv
+8/8 Mutants found
+
+just mutate fifo_crv
+8/8 mutants found
+
 ```
 
-**The number:** LLM transaction at 100 cycles: `wr_full = 0`, maximum occupancy 6, 0 cycles at 7 and 8, stimulus self-check failed. Phase-based transaction at 100 cycles: `wr_full = 7`, 9 cycles at full, passed. At 3,000 cycles: 182 cycles at full (LLM) against 243 (phase-based), `wr_full` 99 against 164, `both` 506 against 977. found/total was not run for the LLM transaction. This is a single seed, so the 100-cycle failure is one sample, not a rate.
+**The number:** Found 8/8, coverage %, vacuity verdict, sby result, lint count>
 
 **Against each prediction:**
 
 | # | Predicted | Observed | Verdict |
 |---|-----------|----------|---------|
-| 1 | No simultaneous read+write at full or empty | By reading the code: `op_mode == 3` (simultaneous, 20% weight) has no occupancy guard, so it can occur at any count. The `both` counter only measures mid-range cycles (506 at 3,000 cycles), so simultaneous at the boundaries was not measured. | refuted by the code; boundary case not measured |
-| 2 | Read-on-empty and write-on-full are never exercised because they are treated as illegal | No guard forbids them in the constraints. At 3,000 cycles `rd_empty` = 224 and `wr_full` = 99. At 100 cycles `rd_empty` = 11 and `wr_full` = 0, but that is because the walk never reached full, not because the write was forbidden. | refuted |
-| 3 | Equal read/write weights throughout, no phase implementation | Write and read probability are both 0.55 at every occupancy (weights 10/35/35/20), with no occupancy or phase field. Fewer cycles at full than the phase-based class at both run lengths, and the walk never exceeded 6 entries at 100 cycles. | confirmed |
+| 1 | No simultaneous wr + rd | wr_en happens on a Full FIFO|  refuted |
+| 2 | overconstraint on boundaries (wr on FUll, rd on empty) | wr on FULL | refuted  |
+| 3 | Reads and writes will have equal weight | The code generated by the ai assistant has wr_en and read_en both at 35% weidht. | confirmed
 
-**Anything not predicted:**
 
-- The weak side of the LLM stimulus is the **full** boundary, not both. `rd_empty` was reached 11 times even at 100 cycles, because a write is accepted at empty while a read is ignored, so the walk collects near 0.
-- The plan relied on directed phases (fill to capacity, drain to empty) to reach the boundaries. The constraint block itself does not shape toward them.
-- The response was SystemVerilog/UVM. The prompt did not name a framework, so a port to pyvsc was needed.
-- Details in the plan that disagree with `fifo.md`: it allows asynchronous reset (the spec says synchronous), it expects `rd_data` to hold the last value or zero during underflow (the spec says `rd_data` is only valid when not empty), and its `cross_boundary_safeguards` crosses `full` with `empty`, which have cells that can never be hit and no ignore bins. Its directed simultaneous read+write list covers counts 1, DEPTH-1 and mid-capacity, not 0 or DEPTH.
-- These plan details were found by reading, not by running.
+**Anything I did not predict:**
+
+Something I didn't predict was how often the FIFO is filled being affected due to not having a kind of "phase" like in HW5. In HW5 the FIFO could walk towards being full or empty with the DRAIN/FILL design. 
 
 ---
-
 ## 4. Takeaway
 
-**The class of failure/successes:**
-Reachability under weak stimulus shaping, hidden by run length. The constraints were legal and kept every corner operation allowed, so nothing was over-constrained. But with equal read and write rates the occupancy has no drift, so the boundary states are reached late and rarely. A 3,000-cycle run reached everything and hid the problem. A 100-cycle run exposed it. The coverage plan and the constraint block were also not connected: the plan asked for boundary cross cells that the constraints did nothing to reach.
+**The class of failure (or of success):**
+Constraint set failure 
 
 **Where it connects:**
-Lecture 1: a coverage model only counts what the stimulus produces, and a hole can be bad luck (reachable, this seed missed it) or unreachable by construction. This run is the bad-luck case. Also the HW5 field guide, section 4: shaping must bring the walk to the corners and hold it there, and a long run hides weak stimulus while a short run shows it.
+This connects to week 5 of our lectures where we learn to properly set constraints to test our edge cases thoroughly. 
 
 **What I would change in how I framed the request:**
-Name the framework (cocotb and pyvsc), say that write-while-full and read-while-empty are legal and must be generated, and ask for constraints that bias toward the boundaries by occupancy instead of leaving that to directed sequences. Ask for the probabilities it expects so they can be measured.
+To lessen the upfront code conversion, the specific environemnt (cocotb, etc) that is being worked in should be given. Give our own feature list that gives the tool more direction on how to write the testbench.
 
 ---
 
@@ -111,4 +177,5 @@ Name the framework (cocotb and pyvsc), say that write-while-full and read-while-
 - [x] The tool is described by class, not by product name.
 - [x] Section 2 was written before the prompt was sent.
 
-**Edits made to the generated output:** the constraint block was ported from SystemVerilog/UVM to pyvsc with help from a second general-purpose LLM. `uvm_sequence_item` and the UVM were replaced by `@vsc.randobj`, `rand int unsigned op_mode` became a 2-bit random field, `dist` and the other constraints were rewritten with `vsc.dist`, `vsc.weight` and `vsc.implies`. The weights (10/35/35/20) and the op-mode mapping are unchanged. The experiment switch (`TXN=llm`) was added to the testbench so both transaction classes could be driven through the same scoreboard.
+
+
