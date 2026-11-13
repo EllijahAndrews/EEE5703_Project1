@@ -75,9 +75,9 @@ No survivors, our suite was able to find and catch all released mutants. Further
 
 | Change | Score before | Score after | Which survivors it caught |
 |--------|-------------:|------------:|---------------------------|
-|Write when full | 4/8 | 6/8 | full_offbyone, wrptr_wrap_early|
-|Read while empty | 6/8 | 7/8 | ignore_full |
-|Simultaneous read write| 7/8 | 8/8 | ignore_empty |
+|test_fifo_layered| 0/8 | 6/8 | full_offbyone,empty_offbyone, count_wr_dec wrptr_wrap_early, rd_data_wrptr, mem_corrupt|
+|Write when full | 6/8 | 7/8 | ignore_full|
+|Read while empty | 7/8 | 8/8 | ignore_empty |
 
 
 
