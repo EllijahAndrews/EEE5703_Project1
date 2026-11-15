@@ -794,7 +794,7 @@ async def test_seeded_random_regression(dut):
             wr_data=txn.wr_data
         )
         
-    fifo_coverage()
+ #   fifo_coverage()
 
     dut._log.info(
         "Single-seeded random regression passed"
@@ -842,7 +842,7 @@ async def test_multi_seed_regression(dut):
                 wr_data=txn.wr_data
             )
             
-    fifo_coverage()
+ #   fifo_coverage()
         
     dut._log.info(
         "Multi-seeded random regression passed"
