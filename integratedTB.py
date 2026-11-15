@@ -877,15 +877,15 @@ async def test_burst_random_regression(dut):
             model.count
         )
 
-        dut._log.info(
-            f"Cycle={cycle_num} "
-            f"Burst={burst.burst_mode} "
-            f"Remaining={burst.burst_remaining} "
-            f"WR={wr_en} "
-            f"RD={rd_en} "
-            f"DATA=0x{wr_data:02X} "
-            f"COUNT={model.count}"
-        )
+        # dut._log.info(
+        #     f"Cycle={cycle_num} "
+        #     f"Burst={burst.burst_mode} "
+        #     f"Remaining={burst.burst_remaining} "
+        #     f"WR={wr_en} "
+        #     f"RD={rd_en} "
+        #     f"DATA=0x{wr_data:02X} "
+        #     f"COUNT={model.count}"
+        # )
 
         #Drive DUT and check against golden model
         await check_cycle(
